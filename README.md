@@ -85,35 +85,99 @@ make test
 Персонаж ходит, прыгает и протаптывает траву. Вода и газ не являются твёрдыми
 препятствиями: плавание, дыхание и урон пока не реализованы.
 
-### Linux (Ubuntu / Debian)
+### Готовые пакеты: запуск без компилятора
+
+Поддерживаются Linux x86_64 и Windows 10/11 x64 (Intel/AMD).
+Windows ARM64 и 32-битные системы отдельно не проверялись.
+
+**Windows:** распакуйте весь пакет `PixelSandbox-Windows-x64`, затем дважды
+нажмите `StartGame.bat` или `PixelSandbox.exe`. Все DLL должны оставаться
+рядом с EXE. Компилятор и MSYS2 для готового пакета не нужны.
+Программа не требует установки и прав администратора. Готовый пакет
+из этого чата собран кросс-компилятором Zig; запуск на настоящей Windows
+в облачной Linux-среде не проверялся.
+
+**Linux:** установите SDL2 runtime (`sudo apt install libsdl2-2.0-0` для
+Ubuntu/Debian), распакуйте пакет и выполните:
+
+```sh
+chmod +x StartGame.sh PixelSandbox
+./StartGame.sh
+```
+
+Нужен графический сеанс X11/Wayland. Linux-пакет из этого чата собран
+для glibc 2.31+; фактический запуск проверен на Debian 13 без экрана.
+Пакеты Linux из GitHub Actions собираются на Ubuntu 22.04 и требуют
+совместимую glibc 2.35+ и libstdc++ этой системы или новее.
+При несовместимости дистрибутива используйте сборку из исходников ниже.
+
+Содержимое `START-HERE.txt` в каждом пакете описывает управление и диагностику.
+
+### Сборка Linux (Ubuntu / Debian)
 
 ```sh
 sudo apt update
-sudo apt install g++ make pkg-config libsdl2-dev
-make game
-./build/game
+sudo apt install build-essential cmake libsdl2-dev
+./scripts/build-linux.sh
+./build/package-linux/StartGame.sh
 ```
 
-### Windows (MSYS2)
+Скрипт собирает движок и игру, запускает оба теста и подготавливает
+папку `build/package-linux`. SDL2 остаётся системной зависимостью.
+Для Fedora нужны `gcc-c++ cmake make SDL2-devel`; для Arch —
+`base-devel cmake sdl2`.
+
+### Сборка Windows 10/11 (MSYS2 UCRT64)
 
 1. Установите MSYS2 с официального сайта https://www.msys2.org/.
 2. Откройте терминал **MSYS2 UCRT64** и установите инструменты:
 
 ```sh
-pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-pkgconf make
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
 ```
 
-3. Перейдите в распакованную папку. Например, если архив распакован в
-`C:\Games\StartApp2`:
+3. Перейдите в исходники и запустите сборку. Например:
 
 ```sh
 cd /c/Games/StartApp2
-make game
-./build/game.exe
+./scripts/build-windows.sh
 ```
 
-Запускайте из UCRT64: его PATH содержит необходимые DLL. Архив содержит
-исходники, а не готовую Windows-программу.
+Скрипт проверит движок и игру, затем создаст `build/package-windows`.
+В эту папку автоматически копируются SDL2.dll и библиотеки среды GCC,
+если они нужны установленному компилятору. Для переноса на другой ПК
+скопируйте **всю папку** и запускайте `StartGame.bat`.
+
+Также есть `scripts/build-windows.bat` для командной строки с уже
+настроенным C++ компилятором, CMake и SDL2. Например, из среды разработчика
+Visual Studio с официальным SDL2 VC SDK:
+
+```bat
+scripts\build-windows.bat -DSDL2_DIR=C:/SDK/SDL2/cmake
+```
+
+Сборка Visual Studio может требовать Visual C++ Redistributable на целевом
+ПК; для переносимого пакета используйте проверяемый в CI вариант MSYS2.
+
+### CMake 3.20+ вручную и сборка только ядра
+
+```sh
+cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build/cmake --config Release --parallel 2
+ctest --test-dir build/cmake -C Release --output-on-failure
+```
+
+Если нужна только библиотека и консольный пример, добавьте
+`-DPIXEL_BUILD_GAME=OFF`: SDL2 тогда не требуется.
+
+### Автоматическая сборка на GitHub
+
+Workflow `.github/workflows/build.yml` собирает и тестирует проект на Linux
+и настоящем Windows runner, затем сохраняет готовые папки как артефакты
+`PixelSandbox-Linux-x64` и `PixelSandbox-Windows-x64`.
+После успешного выполнения их можно скачать из вкладки Actions репозитория
+(для скачивания артефактов GitHub может потребовать вход в аккаунт).
+Наличие workflow само по себе не означает, что проверка уже прошла.
 
 ### macOS
 

@@ -1,4 +1,5 @@
 #include "sandbox.hpp"
+#define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <iostream>
 #include <stdexcept>
@@ -97,6 +98,7 @@ void smoke(Sandbox& game, SDL_Renderer* renderer) {
 }
 int main(int argc, char** argv) {
     const bool testing = argc > 1 && std::string(argv[1]) == "--smoke-test";
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) { std::cerr << SDL_GetError() << '\n'; return 1; }
     SDL_Window* window = SDL_CreateWindow("Pixel sandbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           Sandbox::width * scale, Sandbox::height * scale,

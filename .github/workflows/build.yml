@@ -1,0 +1,45 @@
+name: Build and test Linux and Windows
+on:
+  push:
+    branches: [main, feature/pixel-engine-sandbox]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential libsdl2-dev
+      - name: Build, test and package
+        run: ./scripts/build-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PixelSandbox-Linux-x64
+          path: build/package-linux/
+          if-no-files-found: error
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+      - name: Build, test and package
+        run: ./scripts/build-windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PixelSandbox-Windows-x64
+          path: build/package-windows/
+          if-no-files-found: error
