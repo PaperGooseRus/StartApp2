@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <iosfwd>
 #include <vector>
 
 namespace pixel {
@@ -31,6 +32,10 @@ public:
     // Fixed simulation tick: 1/60 second. Rendering frequency is independent.
     void tick();
     std::size_t count(Material material) const noexcept;
+    // Versioned, little-endian snapshot with a corruption checksum.
+    // Loading constructs a new world; it never modifies an existing one.
+    void save(std::ostream& output) const;
+    static World load(std::istream& input);
 private:
     std::size_t index(int x, int y) const;
     bool inside(int x, int y) const noexcept;

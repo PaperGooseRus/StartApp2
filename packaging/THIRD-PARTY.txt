@@ -1,0 +1,13 @@
+SDL2: https://github.com/libsdl-org/SDL
+Windows download package includes unmodified SDL2.dll 2.32.10 from the official
+SDL2 MinGW development release. License: SDL2-LICENSE.txt.
+Linux uses the system SDL2 runtime rather than redistributing its binary.
+
+The cross-compiled downloads supplied in this chat use Zig 0.13.0, with
+statically linked LLVM libc++, libc++abi and libunwind runtime code.
+Their license notices are in LLVM-LICENSE.txt.
+Windows startup/runtime code includes MinGW-w64 code; see MINGW-LICENSE.txt.
+
+Native MSYS2 builds may instead include GCC runtime DLLs. These are distributed
+under GPLv3 with the GCC Runtime Library Exception 3.1. See the GCC license and
+exception notices packaged by the native build script.
