@@ -7,12 +7,16 @@ This program has no installer and does not require administrator access.
 A/D or arrows: move. Space: jump.
 1 sand, 2 water, 3 gas, 4 stone, 5 soil, 6 erase.
 Left mouse: paint; right mouse: erase.
-P pause; F world speed x30; R reset; Escape quit.
+P pause; F world speed x30; R reset; F5 save; F9 load; Escape quit.
 
-Diagnostics: open a terminal in this folder and run:
+Diagnostics: double-click CheckGame.bat to test physics, saves and rendering.
+You can also open a terminal in this folder and run:
   set SDL_VIDEODRIVER=dummy
   PixelSandbox.exe --smoke-test
 Clear SDL_VIDEODRIVER before launching the visible game.
 
 SDL2 is included under the zlib license; see licenses/SDL2-LICENSE.txt.
 This build is unsigned. Windows may show a publisher warning.
+
+Save slot: %APPDATA%\PaperGoose\PixelSandbox\quick-save.pxs
+F5 saves the world and player; F9 restores them, including after restart.

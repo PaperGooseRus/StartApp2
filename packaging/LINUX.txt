@@ -13,7 +13,10 @@ No compiler is needed to run the binary package.
 A/D or arrows: move. Space: jump.
 1 sand, 2 water, 3 gas, 4 stone, 5 soil, 6 erase.
 Left mouse: paint; right mouse: erase.
-P pause; F world speed x30; R reset; Escape quit.
+P pause; F world speed x30; R reset; F5 save; F9 load; Escape quit.
 
 Diagnostics: SDL_VIDEODRIVER=dummy ./StartGame.sh --smoke-test
 If your distribution cannot load the binary, build from source; see README.md.
+
+Save slot: ~/.local/share/PaperGoose/PixelSandbox/quick-save.pxs
+(or the XDG_DATA_HOME directory). F5 saves; F9 restores after restart.

@@ -1,9 +1,12 @@
 #include "sandbox.hpp"
+#include "storage.hpp"
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <memory>
+#include <sstream>
 
 constexpr int scale = 8;
 void render(SDL_Renderer* renderer, const Sandbox& game, bool present = true) {
@@ -94,13 +97,19 @@ void smoke(Sandbox& game, SDL_Renderer* renderer) {
     if (SDL_RenderReadPixels(renderer, &sample, SDL_PIXELFORMAT_RGBA32, rgba, 4) != 0 || rgba[0] <= 19)
         throw std::runtime_error("Gas density rendering failed");
     SDL_RenderPresent(renderer);
-    std::cout << "Game smoke checks passed: movement, floor, footsteps, jump, landing, brush, rendering\n";
+    std::stringstream snapshot(std::ios::in | std::ios::out | std::ios::binary);
+    storage::write(game, snapshot);
+    auto restored = storage::read(snapshot);
+    if (restored.x != game.x || restored.y != game.y ||
+        restored.world.mass(pixel::Material::Water) != game.world.mass(pixel::Material::Water))
+        throw std::runtime_error("Game save restore failed");
+    std::cout << "Game smoke checks passed: movement, floor, footsteps, jump, landing, brush, rendering, save/load\n";
 }
 int main(int argc, char** argv) {
     const bool testing = argc > 1 && std::string(argv[1]) == "--smoke-test";
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) { std::cerr << SDL_GetError() << '\n'; return 1; }
-    SDL_Window* window = SDL_CreateWindow("Pixel sandbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.3", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           Sandbox::width * scale, Sandbox::height * scale,
                                           testing ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
     SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE) : nullptr;
@@ -110,8 +119,15 @@ int main(int argc, char** argv) {
         Sandbox game;
         if (testing) smoke(game, renderer);
         else {
+            std::unique_ptr<char, decltype(&SDL_free)> prefPath(SDL_GetPrefPath("PaperGoose", "PixelSandbox"), SDL_free);
+            std::filesystem::path saveFile;
+            if (prefPath) saveFile = std::filesystem::u8path(prefPath.get()) / "quick-save.pxs";
+            if (!saveFile.empty()) std::cout << "Save file: " << saveFile.u8string() << '\n';
+            else std::cerr << "Save directory unavailable: " << SDL_GetError() << '\n';
+            std::string notice;
+            double noticeUntil = 0;
             std::cout << "A/D or arrows: move; Space: jump; 1-6: sand/water/gas/stone/soil/erase;\n"
-                         "Left mouse: paint; Right mouse: erase; P: pause; F: fast simulation; R: reset; Esc: exit\n";
+                         "Left mouse: paint; Right mouse: erase; P: pause; F: fast simulation; R: reset; F5: save; F9: load; Esc: exit\n";
             pixel::Material brush = pixel::Material::Sand;
             const char* names[] = {"AIR", "STONE", "SOIL", "SAND", "WATER", "GAS"};
             bool running = true, paused = false, fast = false;
@@ -128,7 +144,29 @@ int main(int argc, char** argv) {
                     case SDLK_SPACE: jump = true; break;
                     case SDLK_p: paused = !paused; accumulator = 0; break;
                     case SDLK_f: fast = !fast; break;
-                    case SDLK_r: game = Sandbox{}; accumulator = 0; break;
+                    case SDLK_r: game = Sandbox{}; accumulator = 0; jump = false; break;
+                    case SDLK_F5:
+                    case SDLK_F9: {
+                        try {
+                            if (saveFile.empty()) throw std::runtime_error("Save directory unavailable");
+                            if (event.key.keysym.sym == SDLK_F5) {
+                                storage::save(game, saveFile);
+                                notice = "SAVED";
+                            } else {
+                                auto loaded = storage::load(saveFile);
+                                game = std::move(loaded);
+                                accumulator = 0;
+                                jump = false;
+                                notice = "LOADED";
+                            }
+                        } catch (const std::exception& error) {
+                            notice = event.key.keysym.sym == SDLK_F5 ? "SAVE FAILED" : "LOAD FAILED";
+                            std::cerr << notice << ": " << error.what() << '\n';
+                        }
+                        std::cout << notice << '\n';
+                        noticeUntil = static_cast<double>(SDL_GetPerformanceCounter()) / SDL_GetPerformanceFrequency() + 5;
+                        break;
+                    }
                     case SDLK_1: brush = pixel::Material::Sand; break;
                     case SDLK_2: brush = pixel::Material::Water; break;
                     case SDLK_3: brush = pixel::Material::Gas; break;
@@ -155,11 +193,11 @@ int main(int argc, char** argv) {
                     accumulator -= 1.0 / 60;
                 }
                 if (paused) jump = false;
-                std::string title = std::string("Pixel sandbox | 1 Sand 2 Water 3 Gas 4 Stone 5 Soil 6 Erase | ") +
+                std::string title = std::string("Pixel sandbox 0.3") + (now < noticeUntil ? " | " + notice : "") + " | 1 Sand 2 Water 3 Gas 4 Stone 5 Soil 6 Erase | " +
                     names[static_cast<int>(brush)] + (paused ? " | PAUSED" : "") + (fast ? " | WORLD x30" : "") +
                     " | Water=" + std::to_string(static_cast<int>(game.world.mass(pixel::Material::Water))) +
                     " Gas=" + std::to_string(static_cast<int>(game.world.mass(pixel::Material::Gas))) +
-                    " | A/D move Space jump | P pause F fast R reset";
+                    " | F5 save F9 load | A/D move Space jump | P pause F fast R reset";
                 SDL_SetWindowTitle(window, title.c_str());
                 render(renderer, game);
                 SDL_Delay(1);
