@@ -20,3 +20,7 @@ This build is unsigned. Windows may show a publisher warning.
 
 Save slot: %APPDATA%\PaperGoose\PixelSandbox\quick-save.pxs
 F5 saves the world and player; F9 restores them, including after restart.
+
+Version 0.4: soil absorbs water; wet soil darkens. Hover soil for wetness.
+Walk over the dry patch on the left, then water it with brush 2.
+F speeds up growth and absorption. Player limbs are visual only for now.

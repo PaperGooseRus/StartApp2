@@ -9,11 +9,12 @@ struct Ground {
     float grass = 1.0f;
     float flattened = 0.0f;
     float compaction = 0.0f;
-    float moisture = 0.6f;
+    double moisture = 0.6;
 };
 // A simulation cell is independent of screen resolution.
 class World {
 public:
+    static constexpr double soilWaterCapacity = 0.5;
     World(int width, int height);
     int width() const noexcept { return width_; }
     int height() const noexcept { return height_; }
@@ -24,7 +25,13 @@ public:
     double water(int x, int y) const;
     double gas(int x, int y) const;
     double gasPressure(int x, int y) const;
-    // count() counts occupied cells; mass() tracks conserved fluid quantity.
+    double soilWater(int x, int y) const;
+    double freeWaterMass() const noexcept;
+    double absorbedWaterMass() const noexcept;
+    // Editing operation: changes stored water, not a simulation transfer.
+    void setMoisture(int x, int y, double saturation);
+    bool exposedSoil(int x, int y) const;
+    // count() counts free-fluid cells; water mass() includes water stored in soil.
     double mass(Material material) const noexcept;
     const Ground& ground(int x, int y) const;
     // Foot contact is an event, not a call made every rendering frame.
@@ -42,6 +49,7 @@ private:
     bool move(int x, int y, int nx, int ny);
     void transferWater(std::size_t from, std::size_t to, double amount);
     void exchangeGas(std::size_t a, std::size_t b, bool vertical);
+    void updateSoil();
     int width_, height_;
     std::uint64_t ticks_ = 0;
     std::vector<Material> cells_;

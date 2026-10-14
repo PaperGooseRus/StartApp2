@@ -20,3 +20,7 @@ If your distribution cannot load the binary, build from source; see README.md.
 
 Save slot: ~/.local/share/PaperGoose/PixelSandbox/quick-save.pxs
 (or the XDG_DATA_HOME directory). F5 saves; F9 restores after restart.
+
+Version 0.4: soil absorbs water; wet soil darkens. Hover soil for wetness.
+Walk over the dry patch on the left, then water it with brush 2.
+F speeds up growth and absorption. Player limbs are visual only for now.
