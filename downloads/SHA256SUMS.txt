@@ -1,3 +1,6 @@
-8a0f8c86ffe4c3d795edc9bc9b3b623f3fb34487d87dc97dcab97b29b2bd8f55  PixelSandbox-v0.4-Windows-x64.zip
 8a21f181a2603320c3816041003bffcd61e75de0c2b337199e44eb7e69e6775d  PixelSandbox-v0.4-Linux-x64.zip
+8a0f8c86ffe4c3d795edc9bc9b3b623f3fb34487d87dc97dcab97b29b2bd8f55  PixelSandbox-v0.4-Windows-x64.zip
+f133aaa8f3cee5c9470e0719db475cc83c25f71d2df315bce1aa14faa3450d9f  PixelSandbox-v0.5-Linux-x64.zip
+15490928d2d40def757ae6af033d30f333868873679c002854784d019f340329  PixelSandbox-v0.5-Windows-x64.zip
 3a332f83b113a9ac9f30a681df8b9d01bbe561d6db4b1a33131e35a3423b7531  StartApp2-v0.4-source.zip
+b3dbde008795aa52702f61f8ec08847f9b16cfec10ddbb49012e2e22aa7be4c0  StartApp2-v0.5-source.zip
