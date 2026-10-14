@@ -13,6 +13,9 @@ struct Sandbox {
         for (int cy = surface; cy < height; ++cy)
             for (int cx = 0; cx < width; ++cx)
                 world.set(cx, cy, cy == height - 1 ? Material::Stone : Material::Soil);
+        // A dry patch lets players test irrigation and regrowth immediately.
+        for (int cy = surface; cy < height - 1; ++cy)
+            for (int cx = 8; cx < 30; ++cx) world.setMoisture(cx, cy, 0.12);
         for (int cy = 43; cy < surface; ++cy) {
             world.set(78, cy, Material::Stone);
             world.set(106, cy, Material::Stone);

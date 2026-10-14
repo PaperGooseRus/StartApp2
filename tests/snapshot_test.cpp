@@ -27,6 +27,20 @@ void rejects(const std::string& data, const char* message) {
     catch (const std::runtime_error&) { rejected = true; }
     check(rejected, message);
 }
+// Fixed snapshot emitted using the v0.3 format: two cells, 0.4 free water,
+// soil with 25% moisture. It is independent of the current snapshot writer.
+std::string legacyFixture() {
+    const unsigned char bytes[] = {
+        0x50,0x58,0x57,0x4f,0x52,0x4c,0x44,0x00,0x01,0x00,0x00,0x00,0x02,0x00,0x00,0x00,
+        0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x9a,0x99,0x99,
+        0x99,0x99,0x99,0xd9,0x3f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,
+        0x3f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x3e,0x02,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x80,0x3f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x3e,0x38,0xcd,
+        0xe9,0x7c,0x86,0x37,0x82,0xbd,
+    };
+    return std::string(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+}
 struct TestDirectory {
     std::filesystem::path path = std::filesystem::temp_directory_path() /
         std::filesystem::u8path(u8"PixelSandbox-проверка-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -46,7 +60,13 @@ int main() {
         world.set(7, 4, Material::Stone);
         for (int i = 0; i < 17; ++i) world.tick();
         const auto data = snapshot(world);
-        check(data.size() == 28 + 8 * 6 * 33 + 8, "portable record size");
+        std::istringstream legacyInput(legacyFixture(), std::ios::binary);
+        auto legacy = pixel::World::load(legacyInput);
+        check(legacy.water(0, 0) == 0.4 && legacy.ground(1, 0).moisture == 0.25,
+              "v0.3 snapshot remains readable");
+        check(legacy.soilWater(1, 0) == 0.125 && snapshot(legacy)[8] == 2,
+              "legacy moisture becomes stored water and is saved as v2");
+        check(data.size() == 28 + 8 * 6 * 37 + 8, "portable record size");
         std::istringstream input(data, std::ios::binary);
         auto loaded = pixel::World::load(input);
         check(snapshot(loaded) == data, "world round trip preserves every field");
@@ -59,7 +79,7 @@ int main() {
             rejects(data.substr(0, length), "truncated snapshot rejected");
         rejects(data + "extra", "trailing bytes rejected");
         auto bad = data; bad[0] = 'X'; rejects(bad, "bad magic rejected");
-        bad = data; bad[8] = 2; rejects(bad, "unknown version rejected");
+        bad = data; bad[8] = 3; rejects(bad, "unknown version rejected");
         bad = data; bad[12] = 0; bad[13] = 0x10; bad[16] = 0; bad[17] = 0x10;
         rejects(bad, "oversized dimensions rejected before allocation");
         bad = data; bad[28] = static_cast<char>(255); rejects(bad, "invalid material rejected");

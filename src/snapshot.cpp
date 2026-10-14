@@ -68,13 +68,13 @@ public:
 private:
     std::istream& stream_;
 };
-bool unit(float value) { return std::isfinite(value) && value >= 0 && value <= 1; }
+bool unit(double value) { return std::isfinite(value) && value >= 0 && value <= 1; }
 }
 void World::save(std::ostream& output) const {
     if (cells_.size() > maxSnapshotCells) throw std::runtime_error("Snapshot limit: 1048576 cells");
     Writer writer(output);
     for (char c : "PXWORLD") writer.number(static_cast<unsigned char>(c), 1); // Includes NUL.
-    writer.number(1, 4);
+    writer.number(2, 4);
     writer.number(static_cast<std::uint32_t>(width_), 4);
     writer.number(static_cast<std::uint32_t>(height_), 4);
     writer.number(ticks_, 8);
@@ -93,7 +93,8 @@ World World::load(std::istream& input) {
     Reader reader(input);
     for (char c : "PXWORLD")
         if (reader.number(1) != static_cast<unsigned char>(c)) throw std::runtime_error("Not a world snapshot");
-    if (reader.number(4) != 1) throw std::runtime_error("Unsupported world snapshot version");
+    const auto version = reader.number(4);
+    if (version != 1 && version != 2) throw std::runtime_error("Unsupported world snapshot version");
     const auto width = reader.number(4), height = reader.number(4);
     if (width == 0 || height == 0 || width > 4096 || height > 4096 || width * height > maxSnapshotCells)
         throw std::runtime_error("Invalid snapshot dimensions");
@@ -107,7 +108,7 @@ World World::load(std::istream& input) {
         ground.grass = reader.real32();
         ground.flattened = reader.real32();
         ground.compaction = reader.real32();
-        ground.moisture = reader.real32();
+        ground.moisture = version == 1 ? static_cast<double>(reader.real32()) : reader.real64();
         if (m > static_cast<unsigned char>(Material::Sand) || !std::isfinite(water) || water < 0 || water > 1 ||
             !std::isfinite(gas) || gas < 0 || gas > 1e6 * result.cells_.size() ||
             (m != static_cast<unsigned char>(Material::Air) && (water != 0 || gas != 0)) ||

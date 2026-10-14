@@ -2,6 +2,7 @@
 #include "storage.hpp"
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
+#include "player_visual.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -9,7 +10,7 @@
 #include <sstream>
 
 constexpr int scale = 8;
-void render(SDL_Renderer* renderer, const Sandbox& game, bool present = true) {
+void render(SDL_Renderer* renderer, const Sandbox& game, bool present = true, int movement = 0) {
     SDL_SetRenderDrawColor(renderer, 19, 27, 43, 255);
     SDL_RenderClear(renderer);
     using pixel::Material;
@@ -19,7 +20,12 @@ void render(SDL_Renderer* renderer, const Sandbox& game, bool present = true) {
             if (m == Material::Air) continue;
             switch (m) {
             case Material::Stone: SDL_SetRenderDrawColor(renderer, 112, 122, 138, 255); break;
-            case Material::Soil: SDL_SetRenderDrawColor(renderer, 104, 70, 43, 255); break;
+            case Material::Soil: {
+                const double wet = game.world.ground(x, y).moisture;
+                SDL_SetRenderDrawColor(renderer, static_cast<Uint8>(130 - 60 * wet),
+                    static_cast<Uint8>(89 - 40 * wet), static_cast<Uint8>(52 - 20 * wet), 255);
+                break;
+            }
             case Material::Sand: SDL_SetRenderDrawColor(renderer, 231, 193, 93, 255); break;
             case Material::Water: SDL_SetRenderDrawColor(renderer, 49, 143, 226, 255); break;
             case Material::Gas: SDL_SetRenderDrawColor(renderer, 179, 141, 206, 255); break;
@@ -44,7 +50,7 @@ void render(SDL_Renderer* renderer, const Sandbox& game, bool present = true) {
             }
             SDL_RenderFillRect(renderer, &cell);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-            if (m == Material::Soil && y > 0 && (game.world.material(x, y - 1) == Material::Air || game.world.material(x, y - 1) == Material::Gas)) {
+            if (game.world.exposedSoil(x, y)) {
                 const auto& g = game.world.ground(x, y);
                 const int grass = static_cast<int>(g.grass * (1 - 0.7f * g.flattened) * 5);
                 SDL_SetRenderDrawColor(renderer, 74, 177, 74, 255);
@@ -53,12 +59,7 @@ void render(SDL_Renderer* renderer, const Sandbox& game, bool present = true) {
             }
         }
     }
-    SDL_SetRenderDrawColor(renderer, 255, 218, 148, 255);
-    SDL_Rect player{static_cast<int>(game.x * scale), static_cast<int>(game.y * scale), 2 * scale, 3 * scale};
-    SDL_RenderFillRect(renderer, &player);
-    SDL_SetRenderDrawColor(renderer, 24, 32, 45, 255);
-    SDL_Rect eye{player.x + scale, player.y + 4, 3, 3};
-    SDL_RenderFillRect(renderer, &eye);
+    drawPlayer(renderer, game.x, game.y, game.grounded, game.walked, movement, scale);
     if (present) SDL_RenderPresent(renderer);
 }
 void smoke(Sandbox& game, SDL_Renderer* renderer) {
@@ -109,7 +110,7 @@ int main(int argc, char** argv) {
     const bool testing = argc > 1 && std::string(argv[1]) == "--smoke-test";
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) { std::cerr << SDL_GetError() << '\n'; return 1; }
-    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.3", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.4", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           Sandbox::width * scale, Sandbox::height * scale,
                                           testing ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
     SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE) : nullptr;
@@ -193,13 +194,22 @@ int main(int argc, char** argv) {
                     accumulator -= 1.0 / 60;
                 }
                 if (paused) jump = false;
-                std::string title = std::string("Pixel sandbox 0.3") + (now < noticeUntil ? " | " + notice : "") + " | 1 Sand 2 Water 3 Gas 4 Stone 5 Soil 6 Erase | " +
-                    names[static_cast<int>(brush)] + (paused ? " | PAUSED" : "") + (fast ? " | WORLD x30" : "") +
-                    " | Water=" + std::to_string(static_cast<int>(game.world.mass(pixel::Material::Water))) +
+                std::string soilInfo;
+                const int hoverX = mx / scale, hoverY = my / scale;
+                if (mx >= 0 && my >= 0 && hoverX < Sandbox::width && hoverY < Sandbox::height &&
+                    game.world.material(hoverX, hoverY) == pixel::Material::Soil) {
+                    const auto& ground = game.world.ground(hoverX, hoverY);
+                    soilInfo = " | Wet=" + std::to_string(static_cast<int>(ground.moisture * 100)) +
+                        "% Compacted=" + std::to_string(static_cast<int>(ground.compaction * 100)) + "%";
+                }
+                std::string title = std::string("Pixel sandbox 0.4") + (now < noticeUntil ? " | " + notice : "") +
+                    soilInfo + " | Free=" + std::to_string(static_cast<int>(game.world.freeWaterMass())) +
+                    " Soil=" + std::to_string(static_cast<int>(game.world.absorbedWaterMass())) +
                     " Gas=" + std::to_string(static_cast<int>(game.world.mass(pixel::Material::Gas))) +
-                    " | F5 save F9 load | A/D move Space jump | P pause F fast R reset";
+                    " | Brush=" + names[static_cast<int>(brush)] + (paused ? " | PAUSED" : "") +
+                    (fast ? " | WORLD x30" : "") + " | F5 save F9 load | 1..6 materials | A/D Space P F R";
                 SDL_SetWindowTitle(window, title.c_str());
-                render(renderer, game);
+                render(renderer, game, true, direction);
                 SDL_Delay(1);
             }
         }

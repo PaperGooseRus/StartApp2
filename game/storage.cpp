@@ -102,7 +102,7 @@ void save(const Sandbox& game, const std::filesystem::path& file) {
 }
 Sandbox load(const std::filesystem::path& file) {
     // Bound input size before allocating or parsing it.
-    if (std::filesystem::file_size(file) > 35 * 1024 * 1024)
+    if (std::filesystem::file_size(file) > 40 * 1024 * 1024)
         throw std::runtime_error("Save file is too large");
     std::ifstream input(file, std::ios::binary);
     if (!input) throw std::runtime_error("Cannot open save file");

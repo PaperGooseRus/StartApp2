@@ -60,8 +60,8 @@ void World::stepOn(int x, int y, float strength) {
     auto& g = ground_[i];
     strength = std::min(strength, 10.0f);
     g.flattened = std::min(1.0f, g.flattened + strength * 0.25f);
-    g.compaction = std::min(1.0f, g.compaction + strength * 0.025f);
-    g.grass = std::max(0.0f, g.grass - strength * 0.04f);
+    g.compaction = std::min(1.0f, g.compaction + strength * 0.025f * static_cast<float>(0.5 + 1.5 * g.moisture));
+    g.grass = std::max(0.0f, g.grass - strength * 0.04f * static_cast<float>(0.75 + 0.75 * g.moisture));
 }
 bool World::move(int x, int y, int nx, int ny) {
     if (!inside(nx, ny)) return false; // Closed boundaries.
@@ -133,15 +133,7 @@ void World::tick() {
             if (x + 1 < width_) exchangeGas(a, index(x + 1, y), false);
         }
     }
-    constexpr float dt = 1.0f / 60.0f;
-    for (std::size_t i = 0; i < cells_.size(); ++i) {
-        if (cells_[i] != Material::Soil) continue;
-        auto& g = ground_[i];
-        g.flattened = std::max(0.0f, g.flattened - dt * 0.08f);
-        g.compaction = std::max(0.0f, g.compaction - dt * 0.005f);
-        g.grass = std::min(1.0f, g.grass + dt * 0.03f * g.moisture *
-                          (1.0f - g.compaction) * (1.0f - g.grass));
-    }
+    updateSoil();
     ++ticks_;
 }
 std::size_t World::count(Material material) const noexcept {
@@ -156,7 +148,7 @@ std::size_t World::count(Material material) const noexcept {
     return result;
 }
 double World::mass(Material m) const noexcept {
-    if (m == Material::Water) return std::accumulate(water_.begin(), water_.end(), 0.0);
+    if (m == Material::Water) return freeWaterMass() + absorbedWaterMass();
     if (m == Material::Gas) return std::accumulate(gas_.begin(), gas_.end(), 0.0);
     return static_cast<double>(count(m));
 }
