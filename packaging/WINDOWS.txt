@@ -24,3 +24,7 @@ F5 saves the world and player; F9 restores them, including after restart.
 Version 0.4: soil absorbs water; wet soil darkens. Hover soil for wetness.
 Walk over the dry patch on the left, then water it with brush 2.
 F speeds up growth and absorption. Player limbs are visual only for now.
+
+Version 0.5: E opens/closes the nearby gate; C toggles camera follow.
+J/L pan when follow is off. Tab toggles foreground decoration.
+Saves include the gate. Old saves remain readable with the gate open.

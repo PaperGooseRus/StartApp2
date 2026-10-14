@@ -5,6 +5,8 @@ pixel_tests.exe
 if errorlevel 1 goto failed
 soil_tests.exe
 if errorlevel 1 goto failed
+scene_tests.exe
+if errorlevel 1 goto failed
 snapshot_tests.exe
 if errorlevel 1 goto failed
 set "SDL_VIDEODRIVER=dummy"
