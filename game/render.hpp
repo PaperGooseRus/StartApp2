@@ -1,5 +1,6 @@
 #pragma once
 #include "sandbox.hpp"
+#include "sprites.hpp"
 #include <SDL.h>
 
 class GameRenderer {
@@ -14,7 +15,10 @@ public:
 private:
     pixel::Camera frameCamera() const;
     void quad(pixel::Rect rect, pixel::Color color, float parallax = 1);
+    void sprite(const pixel::Visual& visual);
+    void interactionHint(const Sandbox& game);
     void terrain(const pixel::World& world);
     SDL_Renderer* renderer_;
+    SpriteCache sprites_;
     pixel::Camera camera_{viewportWidth, viewportHeight};
 };

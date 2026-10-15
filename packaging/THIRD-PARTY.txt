@@ -11,3 +11,6 @@ Windows startup/runtime code includes MinGW-w64 code; see MINGW-LICENSE.txt.
 Native MSYS2 builds may instead include GCC runtime DLLs. These are distributed
 under GPLv3 with the GCC Runtime Library Exception 3.1. See the GCC license and
 exception notices packaged by the native build script.
+
+PNG decoding: stb_image, MIT license; see STB-LICENSE.txt.
+Tree artwork: generated for this project; see assets/README.md.

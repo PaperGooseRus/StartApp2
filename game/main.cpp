@@ -12,6 +12,13 @@
 constexpr int scale = GameRenderer::scale;
 void smoke(Sandbox& game, SDL_Renderer* renderer) {
     GameRenderer view(renderer);
+    SpriteCache cache(renderer);
+    const auto& oak = cache.get("oak.png");
+    if (oak.width <= 0 || oak.height <= 0 || &oak != &cache.get("oak.png"))
+        throw std::runtime_error("Sprite loading/cache failed");
+    bool rejected = false;
+    try { cache.get("../oak.png"); } catch (const std::runtime_error&) { rejected = true; }
+    if (!rejected) throw std::runtime_error("Sprite path traversal accepted");
     const float start = game.x;
     for (int i = 0; i < 60; ++i) game.tick(1, false);
     if (game.x < start + 10 || !game.grounded) throw std::runtime_error("Player movement/floor failed");
@@ -67,6 +74,24 @@ void smoke(Sandbox& game, SDL_Renderer* renderer) {
     sample = SDL_Rect{44 * scale, 10 * scale, 1, 1};
     if (SDL_RenderReadPixels(renderer, &sample, SDL_PIXELFORMAT_RGBA32, rgba, 4) != 0 || rgba[2] != 226 || rgba[0] != 49)
         throw std::runtime_error("Panned water brush must align with rendering");
+    // Verify transparent PNG corners, cropped source regions and color modulation.
+    view.camera().moveTo({0, 0});
+    pixel::SceneObject png;
+    pixel::Visual image{pixel::RenderLayer::Characters, 2000, {5, 20, 16, 16}};
+    image.sprite = pixel::Sprite{"oak.png", {0, 0, 1, 1}};
+    png.visuals.push_back(image);
+    image.bounds = {30, 20, 4, 4};
+    image.sprite->source = {0.45f, 0.75f, 0.1f, 0.1f};
+    image.color = {0, 255, 255, 255};
+    png.visuals.push_back(image);
+    game.scene.add(png);
+    view.draw(game, false);
+    sample = SDL_Rect{5 * scale, 20 * scale, 1, 1};
+    if (SDL_RenderReadPixels(renderer, &sample, SDL_PIXELFORMAT_RGBA32, rgba, 4) != 0 || rgba[0] != 19 || rgba[1] != 27)
+        throw std::runtime_error("PNG transparency failed");
+    sample = SDL_Rect{32 * scale, 22 * scale, 1, 1};
+    if (SDL_RenderReadPixels(renderer, &sample, SDL_PIXELFORMAT_RGBA32, rgba, 4) != 0 || rgba[0] > 2 || rgba[1] <= 27)
+        throw std::runtime_error("PNG crop/tint failed");
     SDL_RenderPresent(renderer);
     std::stringstream snapshot(std::ios::in | std::ios::out | std::ios::binary);
     storage::write(game, snapshot);
@@ -74,13 +99,13 @@ void smoke(Sandbox& game, SDL_Renderer* renderer) {
     if (restored.x != game.x || restored.y != game.y ||
         restored.world.mass(pixel::Material::Water) != game.world.mass(pixel::Material::Water))
         throw std::runtime_error("Game save restore failed");
-    std::cout << "Game smoke checks passed: movement, floor, footsteps, jump, landing, brush, rendering, layers, camera brush, save/load\n";
+    std::cout << "Game smoke checks passed: movement, floor, footsteps, jump, landing, brush, rendering, layers, camera brush, PNG transparency/crop/cache, save/load\n";
 }
 int main(int argc, char** argv) {
     const bool testing = argc > 1 && std::string(argv[1]) == "--smoke-test";
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) { std::cerr << SDL_GetError() << '\n'; return 1; }
-    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.5", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.6", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           GameRenderer::viewportWidth * scale, GameRenderer::viewportHeight * scale,
                                           testing ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
     SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE) : nullptr;
@@ -99,7 +124,7 @@ int main(int argc, char** argv) {
             std::string notice;
             double noticeUntil = 0;
             std::cout << "A/D or arrows: move; Space: jump; 1-6: sand/water/gas/stone/soil/erase;\n"
-                         "Left mouse: paint; Right mouse: erase; P: pause; F: fast simulation; R: reset; F5: save; F9: load; E: gate; C: camera follow; J/L: pan; Tab: foreground; Esc: exit\n";
+                         "Left mouse: paint; Right mouse: erase; P: pause; F: fast simulation; R: reset; F5: save; F9: load; E: interact; C: camera follow; J/L: pan; Tab: foreground; Esc: exit\n";
             pixel::Material brush = pixel::Material::Sand;
             const char* names[] = {"AIR", "STONE", "SOIL", "SAND", "WATER", "GAS"};
             bool running = true, paused = false, fast = false, followCamera = true;
@@ -121,10 +146,12 @@ int main(int argc, char** argv) {
                     case SDLK_TAB: view.showForeground = !view.showForeground; break;
                     case SDLK_e: {
                         const auto interaction = game.interact();
-                        if (interaction == Sandbox::Interaction::Opened) notice = "GATE OPEN";
-                        else if (interaction == Sandbox::Interaction::Closed) notice = "GATE CLOSED";
+                        if (interaction == Sandbox::Interaction::Opened) notice = "DOOR OPEN";
+                        else if (interaction == Sandbox::Interaction::Closed) notice = "DOOR CLOSED";
                         else if (interaction == Sandbox::Interaction::Occupied) notice = "STEP OUT OF THE GATE";
-                        else notice = "MOVE CLOSE TO THE GATE";
+                        else if (interaction == Sandbox::Interaction::ChestOpened) notice = "CHEST OPEN";
+                        else if (interaction == Sandbox::Interaction::ChestClosed) notice = "CHEST CLOSED";
+                        else notice = "NO ACCESSIBLE OBJECT NEARBY";
                         noticeUntil = static_cast<double>(SDL_GetPerformanceCounter()) / SDL_GetPerformanceFrequency() + 4;
                         break;
                     }
@@ -195,13 +222,14 @@ int main(int argc, char** argv) {
                     soilInfo = " | Wet=" + std::to_string(static_cast<int>(ground.moisture * 100)) +
                         "% Compacted=" + std::to_string(static_cast<int>(ground.compaction * 100)) + "%";
                 }
-                std::string title = std::string("Pixel sandbox 0.5") + (now < noticeUntil ? " | " + notice : "") +
+                std::string title = std::string("Pixel sandbox 0.6") + (now < noticeUntil ? " | " + notice : "") +
+                    (game.interactionPrompt().empty() ? "" : " | " + game.interactionPrompt()) +
                     soilInfo + " | Free=" + std::to_string(static_cast<int>(game.world.freeWaterMass())) +
                     " Soil=" + std::to_string(static_cast<int>(game.world.absorbedWaterMass())) +
                     " Gas=" + std::to_string(static_cast<int>(game.world.mass(pixel::Material::Gas))) +
                     " | Brush=" + names[static_cast<int>(brush)] + (paused ? " | PAUSED" : "") +
                     (fast ? " | WORLD x30" : "") +  (followCamera ? " | CAMERA FOLLOW" : " | CAMERA J/L") +
-                    (view.showForeground ? " | FRONT ON" : " | FRONT OFF") + " | E gate C camera Tab front F5/F9";
+                    (view.showForeground ? " | FRONT ON" : " | FRONT OFF") + " | E interact C camera Tab front F5/F9";
                 SDL_SetWindowTitle(window, title.c_str());
                 view.draw(game, true, direction);
                 SDL_Delay(1);

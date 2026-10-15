@@ -32,7 +32,8 @@ SDL_CFLAGS ?= $(shell pkg-config --cflags sdl2)
 SDL_LIBS ?= $(shell pkg-config --libs sdl2)
 .PHONY: game game-test
 game: build/game
-build/game: $(ENGINE_SOURCES) $(ENGINE_HEADERS) game/main.cpp game/sandbox.hpp game/storage.cpp game/storage.hpp game/player_visual.hpp game/render.cpp game/render.hpp | build
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SDL_CFLAGS) $(ENGINE_SOURCES) game/main.cpp game/render.cpp game/storage.cpp -o $@ $(SDL_LIBS)
+build/game: $(ENGINE_SOURCES) $(ENGINE_HEADERS) game/main.cpp game/sandbox.hpp game/storage.cpp game/storage.hpp game/player_visual.hpp game/render.cpp game/render.hpp game/sprites.cpp game/sprites.hpp third_party/stb_image.h assets/oak.png | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SDL_CFLAGS) $(ENGINE_SOURCES) game/main.cpp game/render.cpp game/storage.cpp game/sprites.cpp -o $@ $(SDL_LIBS)
+	cp -R assets build/
 game-test: build/game
 	SDL_VIDEODRIVER=dummy ./build/game --smoke-test

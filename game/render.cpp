@@ -4,7 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
-GameRenderer::GameRenderer(SDL_Renderer* renderer) : renderer_(renderer) {
+GameRenderer::GameRenderer(SDL_Renderer* renderer) : renderer_(renderer), sprites_(renderer) {
     if (!renderer) throw std::invalid_argument("Renderer must exist");
 }
 void GameRenderer::followPlayer(const Sandbox& game) {
@@ -34,6 +34,43 @@ void GameRenderer::quad(pixel::Rect rect, pixel::Color color, float parallax) {
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
     SDL_RenderFillRect(renderer_, &box);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+}
+void GameRenderer::sprite(const pixel::Visual& visual) {
+    const auto screen = frameCamera().worldToScreen({visual.bounds.x, visual.bounds.y}, visual.parallax);
+    const auto view = camera_.viewport();
+    if (screen.x >= view.x || screen.y >= view.y || screen.x + visual.bounds.width <= 0 || screen.y + visual.bounds.height <= 0) return;
+    const auto& texture = sprites_.get(visual.sprite->asset);
+    const auto region = visual.sprite->source;
+    const float left = std::max(0.0f, screen.x), top = std::max(0.0f, screen.y);
+    const float right = std::min(view.x, screen.x + visual.bounds.width), bottom = std::min(view.y, screen.y + visual.bounds.height);
+    const int sx = std::clamp(static_cast<int>((region.x + (static_cast<double>(left) - screen.x) / visual.bounds.width * region.width) * texture.width), 0, texture.width - 1);
+    const int sy = std::clamp(static_cast<int>((region.y + (static_cast<double>(top) - screen.y) / visual.bounds.height * region.height) * texture.height), 0, texture.height - 1);
+    const int ex = std::clamp(static_cast<int>(std::ceil((region.x + (static_cast<double>(right) - screen.x) / visual.bounds.width * region.width) * texture.width)), sx + 1, texture.width);
+    const int ey = std::clamp(static_cast<int>(std::ceil((region.y + (static_cast<double>(bottom) - screen.y) / visual.bounds.height * region.height) * texture.height)), sy + 1, texture.height);
+    SDL_Rect source{sx, sy, ex - sx, ey - sy};
+    SDL_Rect destination{static_cast<int>(std::floor(left * scale)), static_cast<int>(std::floor(top * scale)),
+        static_cast<int>(std::ceil(right * scale)) - static_cast<int>(std::floor(left * scale)),
+        static_cast<int>(std::ceil(bottom * scale)) - static_cast<int>(std::floor(top * scale))};
+    SDL_SetTextureColorMod(texture.image.get(), visual.color.r, visual.color.g, visual.color.b);
+    SDL_SetTextureAlphaMod(texture.image.get(), visual.color.a);
+    if (SDL_RenderCopy(renderer_, texture.image.get(), &source, &destination) != 0)
+        throw std::runtime_error("Cannot draw sprite");
+}
+void GameRenderer::interactionHint(const Sandbox& game) {
+    const auto target = game.interactionTarget();
+    if (!target) return;
+    const auto bounds = target->bounds;
+    const auto screen = frameCamera().worldToScreen({bounds.x, bounds.y});
+    SDL_SetRenderDrawColor(renderer_, 255, 223, 119, 255);
+    SDL_Rect outline{static_cast<int>(screen.x * scale) - 1, static_cast<int>(screen.y * scale) - 1,
+        static_cast<int>(bounds.width * scale) + 2, static_cast<int>(bounds.height * scale) + 2};
+    SDL_RenderDrawRect(renderer_, &outline);
+    // A readable E key badge, without a font/runtime dependency.
+    SDL_Rect badge{outline.x + outline.w / 2 - 6, outline.y - 15, 12, 12};
+    SDL_SetRenderDrawColor(renderer_, 24, 32, 45, 255); SDL_RenderFillRect(renderer_, &badge);
+    SDL_SetRenderDrawColor(renderer_, 255, 223, 119, 255); SDL_RenderDrawRect(renderer_, &badge);
+    SDL_RenderDrawLine(renderer_, badge.x + 4, badge.y + 3, badge.x + 4, badge.y + 8);
+    for (int y : {3, 5, 8}) SDL_RenderDrawLine(renderer_, badge.x + 4, badge.y + y, badge.x + 8, badge.y + y);
 }
 void GameRenderer::terrain(const pixel::World& world) {
     const auto camera = frameCamera();
@@ -91,7 +128,8 @@ void GameRenderer::draw(const Sandbox& game, bool present, int movement) {
             const auto& visual = command.visual;
             if (visual.layer != target) continue;
             if ((target == pixel::RenderLayer::Interactables || target == pixel::RenderLayer::Characters) && (visual.order < 0) != beforeAnchor) continue;
-            quad(visual.bounds, visual.color, visual.parallax);
+            if (visual.sprite) sprite(visual);
+            else quad(visual.bounds, visual.color, visual.parallax);
         }
     };
     layer(pixel::RenderLayer::Background);
@@ -103,5 +141,6 @@ void GameRenderer::draw(const Sandbox& game, bool present, int movement) {
     drawPlayer(renderer_, player.x, player.y, game.grounded, game.walked, movement, scale);
     layer(pixel::RenderLayer::Characters);
     if (showForeground) layer(pixel::RenderLayer::Foreground);
+    interactionHint(game);
     if (present) SDL_RenderPresent(renderer_);
 }
