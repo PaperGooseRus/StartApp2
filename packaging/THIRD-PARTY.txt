@@ -14,3 +14,7 @@ exception notices packaged by the native build script.
 
 PNG decoding: stb_image, MIT license; see STB-LICENSE.txt.
 Tree artwork: generated for this project; see assets/README.md.
+
+PixelStudio uses Dear ImGui 1.91.9b docking (MIT): IMGUI-LICENSE.txt.
+The bundled DejaVu font is distributed with its notice in assets/fonts/LICENSE.txt.
+PNG export uses stb_image_write under the same STB-LICENSE.txt MIT option.

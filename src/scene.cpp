@@ -21,14 +21,16 @@ bool overlaps(Rect a, Rect b) noexcept {
     return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 ObjectId Scene::add(SceneObject object) {
-    if (!finite(object.position) || objects_.size() >= std::numeric_limits<ObjectId>::max())
+    if (!finite(object.position) || objects_.size() >= 4096)
         throw std::invalid_argument("Invalid scene position or object limit");
+    if (object.name.find('\0') != std::string::npos || object.action.find('\0') != std::string::npos || object.name.size() > 256 || object.action.size() > 64 || object.visuals.size() > 128)
+        throw std::invalid_argument("Scene object exceeds limits");
     for (const auto& visual : object.visuals) {
         if (visual.layer > RenderLayer::Foreground || !valid(visual.bounds) ||
             !valid(positioned(visual.bounds, object.position)) || !std::isfinite(visual.parallax) ||
             visual.parallax < 0 || visual.parallax > 4)
             throw std::invalid_argument("Invalid visual");
-        if (visual.sprite && (visual.sprite->asset.empty() || !valid(visual.sprite->source) ||
+        if (visual.sprite && (visual.sprite->asset.empty() || visual.sprite->asset.find('\0') != std::string::npos || visual.sprite->asset.size() > 512 || !valid(visual.sprite->source) ||
             visual.sprite->source.x < 0 || visual.sprite->source.y < 0 ||
             visual.sprite->source.x + visual.sprite->source.width > 1 ||
             visual.sprite->source.y + visual.sprite->source.height > 1))
@@ -43,6 +45,15 @@ ObjectId Scene::add(SceneObject object) {
     return static_cast<ObjectId>(objects_.size() - 1);
 }
 const SceneObject& Scene::object(ObjectId id) const { return objects_.at(id); }
+void Scene::replace(ObjectId id, SceneObject value) {
+    (void)objects_.at(id);
+    Scene check; check.add(value); // Full validation before mutation.
+    objects_[id] = std::move(value);
+}
+void Scene::erase(ObjectId id) {
+    auto& value = objects_.at(id);
+    value = SceneObject{}; value.active = false;
+}
 void Scene::setPosition(ObjectId id, Vec2 position) {
     auto& value = objects_.at(id);
     if (!finite(position)) throw std::invalid_argument("Invalid scene position");
@@ -72,7 +83,7 @@ std::vector<InteractionCandidate> Scene::interactions(Vec2 origin, float reach, 
     std::vector<InteractionCandidate> result;
     for (std::size_t i = 0; i < objects_.size(); ++i) {
         const auto& object = objects_[i];
-        if (!object.interaction || !object.interaction->enabled || object.interaction->plane != plane) continue;
+        if (!object.active || !object.interaction || !object.interaction->enabled || object.interaction->plane != plane) continue;
         const auto& area = *object.interaction;
         const auto box = positioned(area.bounds, object.position);
         const Vec2 point{std::clamp(origin.x, box.x, box.x + box.width), std::clamp(origin.y, box.y, box.y + box.height)};
@@ -85,6 +96,7 @@ std::vector<InteractionCandidate> Scene::interactions(Vec2 origin, float reach, 
 std::vector<DrawCommand> Scene::drawList() const {
     std::vector<DrawCommand> result;
     for (std::size_t i = 0; i < objects_.size(); ++i) {
+        if (!objects_[i].active) continue;
         for (auto visual : objects_[i].visuals) {
             if (!visual.visible) continue;
             visual.bounds = positioned(visual.bounds, objects_[i].position);
@@ -100,7 +112,7 @@ std::vector<DrawCommand> Scene::drawList() const {
 bool Scene::overlaps(Rect box, std::uint32_t groups, int plane) const {
     if (!valid(box)) throw std::invalid_argument("Invalid collision query");
     for (const auto& object : objects_) {
-        if (!object.collider) continue;
+        if (!object.active || !object.collider) continue;
         const auto& collider = *object.collider;
         if (collider.enabled && collider.plane == plane && (collider.groups & groups) != 0 &&
             pixel::overlaps(box, positioned(collider.bounds, object.position))) return true;

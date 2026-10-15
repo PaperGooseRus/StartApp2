@@ -17,7 +17,7 @@ jobs:
         run: ./scripts/build-linux.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: PixelSandbox-Linux-x64
+          name: PixelStudio-Linux-x64
           path: build/package-linux/
           if-no-files-found: error
   windows:
@@ -40,6 +40,6 @@ jobs:
         run: ./scripts/build-windows.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: PixelSandbox-Windows-x64
+          name: PixelStudio-Windows-x64
           path: build/package-windows/
           if-no-files-found: error

@@ -1,9 +1,11 @@
 #include "sandbox.hpp"
 #include "storage.hpp"
+#include "project.hpp"
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include "render.hpp"
 #include <iostream>
+#include "platform.hpp"
 #include <stdexcept>
 #include <string>
 #include <memory>
@@ -92,6 +94,17 @@ void smoke(Sandbox& game, SDL_Renderer* renderer) {
     sample = SDL_Rect{32 * scale, 22 * scale, 1, 1};
     if (SDL_RenderReadPixels(renderer, &sample, SDL_PIXELFORMAT_RGBA32, rgba, 4) != 0 || rgba[0] > 2 || rgba[1] <= 27)
         throw std::runtime_error("PNG crop/tint failed");
+    pixel::Image atlas(2,1); atlas.at(0,0)={255,0,0,255}; atlas.at(1,0)={0,0,255,255};
+    view.sprites().put("@test-animation",atlas);
+    pixel::SceneObject animated;
+    pixel::Visual animation{pixel::RenderLayer::Characters,3000,{45,20,2,2}};
+    animation.sprite = pixel::Sprite{"@test-animation",{0,0,.5f,1},pixel::AnimationClip({{{0,0,.5f,1},100},{{.5f,0,.5f,1},100}})};
+    animated.visuals.push_back(animation); game.scene.add(animated);
+    sample = SDL_Rect{45*scale,20*scale,1,1};
+    view.draw(game,false,0,0);
+    if(SDL_RenderReadPixels(renderer,&sample,SDL_PIXELFORMAT_RGBA32,rgba,4)!=0||rgba[0]!=255||rgba[2]!=0)throw std::runtime_error("Animation first frame failed");
+    view.draw(game,false,0,.1);
+    if(SDL_RenderReadPixels(renderer,&sample,SDL_PIXELFORMAT_RGBA32,rgba,4)!=0||rgba[0]!=0||rgba[2]!=255)throw std::runtime_error("Animation second frame failed");
     SDL_RenderPresent(renderer);
     std::stringstream snapshot(std::ios::in | std::ios::out | std::ios::binary);
     storage::write(game, snapshot);
@@ -99,13 +112,16 @@ void smoke(Sandbox& game, SDL_Renderer* renderer) {
     if (restored.x != game.x || restored.y != game.y ||
         restored.world.mass(pixel::Material::Water) != game.world.mass(pixel::Material::Water))
         throw std::runtime_error("Game save restore failed");
-    std::cout << "Game smoke checks passed: movement, floor, footsteps, jump, landing, brush, rendering, layers, camera brush, PNG transparency/crop/cache, save/load\n";
+    std::cout << "Game smoke checks passed: movement, floor, footsteps, jump, landing, brush, rendering, layers, camera brush, PNG transparency/crop/cache, animated rendering, save/load\n";
 }
 int main(int argc, char** argv) {
-    const bool testing = argc > 1 && std::string(argv[1]) == "--smoke-test";
+    const auto arguments = applicationArguments(argc, argv);
+    argc = static_cast<int>(arguments.size());
+    const bool projectCheck = argc > 2 && arguments[1] == "--check-project";
+    const bool testing = projectCheck || (argc > 1 && arguments[1] == "--smoke-test");
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) { std::cerr << SDL_GetError() << '\n'; return 1; }
-    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.6", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    SDL_Window* window = SDL_CreateWindow("Pixel sandbox 0.7", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           GameRenderer::viewportWidth * scale, GameRenderer::viewportHeight * scale,
                                           testing ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
     SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE) : nullptr;
@@ -113,12 +129,22 @@ int main(int argc, char** argv) {
     if (!renderer) { std::cerr << SDL_GetError() << '\n'; result = 1; }
     else try {
         GameRenderer view(renderer);
-        Sandbox game;
-        if (testing) smoke(game, renderer);
+        std::optional<studio::Project> project;
+        if (argc > 2 && (arguments[1] == "--project" || projectCheck)) {
+            project = studio::load(std::filesystem::u8path(arguments[2]));
+            for (const auto& art : project->art) view.sprites().put(art.key(), art.atlas());
+        }
+        Sandbox game = project ? project->game : Sandbox{};
+        double animationTime = 0;
+        if (projectCheck) {
+            for (int i=0;i<60;++i) game.tick(0,false);
+            view.draw(game,false,0,0.5);
+            std::cout << "Project loaded, simulated and rendered successfully\n";
+        } else if (testing) smoke(game, renderer);
         else {
             std::unique_ptr<char, decltype(&SDL_free)> prefPath(SDL_GetPrefPath("PaperGoose", "PixelSandbox"), SDL_free);
             std::filesystem::path saveFile;
-            if (prefPath) saveFile = std::filesystem::u8path(prefPath.get()) / "quick-save.pxs";
+            if (prefPath) saveFile = std::filesystem::u8path(prefPath.get()) / (project ? "project-quick-save.pxproj" : "quick-save.pxs");
             if (!saveFile.empty()) std::cout << "Save file: " << saveFile.u8string() << '\n';
             else std::cerr << "Save directory unavailable: " << SDL_GetError() << '\n';
             std::string notice;
@@ -141,7 +167,7 @@ int main(int argc, char** argv) {
                     case SDLK_SPACE: jump = true; break;
                     case SDLK_p: paused = !paused; accumulator = 0; break;
                     case SDLK_f: fast = !fast; break;
-                    case SDLK_r: game = Sandbox{}; accumulator = 0; jump = false; view.followPlayer(game); break;
+                    case SDLK_r: game = project ? project->game : Sandbox{}; animationTime = 0; accumulator = 0; jump = false; view.followPlayer(game); break;
                     case SDLK_c: followCamera = !followCamera; break;
                     case SDLK_TAB: view.showForeground = !view.showForeground; break;
                     case SDLK_e: {
@@ -160,11 +186,14 @@ int main(int argc, char** argv) {
                         try {
                             if (saveFile.empty()) throw std::runtime_error("Save directory unavailable");
                             if (event.key.keysym.sym == SDLK_F5) {
-                                storage::save(game, saveFile);
+                                if (project) { auto saved = *project; saved.game = game; studio::save(saved, saveFile); }
+                                else storage::save(game, saveFile);
                                 notice = "SAVED";
                             } else {
-                                auto loaded = storage::load(saveFile);
-                                game = std::move(loaded);
+                                if (project) {
+                                    auto saved = studio::load(saveFile); game = saved.game;
+                                    for (const auto& art : saved.art) view.sprites().put(art.key(), art.atlas());
+                                } else game = storage::load(saveFile);
                                 accumulator = 0;
                                 jump = false;
                                 notice = "LOADED";
@@ -207,6 +236,7 @@ int main(int argc, char** argv) {
                         if (buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) game.paint(static_cast<int>(std::floor(target.x)), static_cast<int>(std::floor(target.y)), pixel::Material::Air);
                     }
                     game.tick(direction, jump);
+                    animationTime += 1.0 / 60;
                     jump = false;
                     if (fast) for (int i = 0; i < 29; ++i) game.world.tick();
                     accumulator -= 1.0 / 60;
@@ -222,7 +252,7 @@ int main(int argc, char** argv) {
                     soilInfo = " | Wet=" + std::to_string(static_cast<int>(ground.moisture * 100)) +
                         "% Compacted=" + std::to_string(static_cast<int>(ground.compaction * 100)) + "%";
                 }
-                std::string title = std::string("Pixel sandbox 0.6") + (now < noticeUntil ? " | " + notice : "") +
+                std::string title = std::string("Pixel sandbox 0.7") + (now < noticeUntil ? " | " + notice : "") +
                     (game.interactionPrompt().empty() ? "" : " | " + game.interactionPrompt()) +
                     soilInfo + " | Free=" + std::to_string(static_cast<int>(game.world.freeWaterMass())) +
                     " Soil=" + std::to_string(static_cast<int>(game.world.absorbedWaterMass())) +
@@ -231,7 +261,7 @@ int main(int argc, char** argv) {
                     (fast ? " | WORLD x30" : "") +  (followCamera ? " | CAMERA FOLLOW" : " | CAMERA J/L") +
                     (view.showForeground ? " | FRONT ON" : " | FRONT OFF") + " | E interact C camera Tab front F5/F9";
                 SDL_SetWindowTitle(window, title.c_str());
-                view.draw(game, true, direction);
+                view.draw(game, true, direction, animationTime);
                 SDL_Delay(1);
             }
         }
