@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(StartApp2 VERSION 0.5.0 LANGUAGES CXX)
+project(StartApp2 VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,15 +52,20 @@ if(PIXEL_BUILD_GAME)
         set_target_properties(SDL2::SDL2 PROPERTIES IMPORTED_LOCATION "${SDL2_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${SDL2_INCLUDE_DIR}")
     endif()
-    add_executable(PixelSandbox game/main.cpp game/render.cpp game/storage.cpp)
+    add_executable(PixelSandbox game/main.cpp game/render.cpp game/storage.cpp game/sprites.cpp)
     target_link_libraries(PixelSandbox PRIVATE pixel_engine SDL2::SDL2)
+    add_custom_target(pixel_assets ALL COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:PixelSandbox>/assets")
+    add_dependencies(PixelSandbox pixel_assets)
+    install(DIRECTORY assets DESTINATION .)
+    install(FILES third_party/STB-LICENSE.txt DESTINATION licenses)
     if(BUILD_TESTING)
         add_test(NAME game_smoke COMMAND PixelSandbox --smoke-test)
         set_tests_properties(game_smoke PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
     endif()
     install(TARGETS PixelSandbox RUNTIME DESTINATION .)
     install(FILES README.md DESTINATION .)
-    install(FILES docs/player-plan.md docs/layers.md DESTINATION docs)
+    install(FILES docs/player-plan.md docs/layers.md docs/interactions.md docs/roadmap.md docs/preview-v0.6.png DESTINATION docs)
     if(WIN32)
         # Copy SDL2.dll beside the executable for both build-tree and packaged launches.
         add_custom_command(TARGET PixelSandbox POST_BUILD COMMAND "${CMAKE_COMMAND}" -E

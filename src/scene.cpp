@@ -28,9 +28,17 @@ ObjectId Scene::add(SceneObject object) {
             !valid(positioned(visual.bounds, object.position)) || !std::isfinite(visual.parallax) ||
             visual.parallax < 0 || visual.parallax > 4)
             throw std::invalid_argument("Invalid visual");
+        if (visual.sprite && (visual.sprite->asset.empty() || !valid(visual.sprite->source) ||
+            visual.sprite->source.x < 0 || visual.sprite->source.y < 0 ||
+            visual.sprite->source.x + visual.sprite->source.width > 1 ||
+            visual.sprite->source.y + visual.sprite->source.height > 1))
+            throw std::invalid_argument("Invalid sprite asset or source region");
     }
     if (object.collider && (!valid(object.collider->bounds) || !valid(positioned(object.collider->bounds, object.position))))
         throw std::invalid_argument("Invalid collider");
+    if (object.interaction && (!valid(object.interaction->bounds) ||
+        !valid(positioned(object.interaction->bounds, object.position)) || !std::isfinite(object.interaction->reach) ||
+        object.interaction->reach <= 0)) throw std::invalid_argument("Invalid interaction area");
     objects_.push_back(std::move(object));
     return static_cast<ObjectId>(objects_.size() - 1);
 }
@@ -42,6 +50,8 @@ void Scene::setPosition(ObjectId id, Vec2 position) {
         if (!valid(positioned(visual.bounds, position))) throw std::invalid_argument("Invalid visual position");
     if (value.collider && !valid(positioned(value.collider->bounds, position)))
         throw std::invalid_argument("Invalid collider position");
+    if (value.interaction && !valid(positioned(value.interaction->bounds, position)))
+        throw std::invalid_argument("Invalid interaction position");
     value.position = position;
 }
 void Scene::setColliderEnabled(ObjectId id, bool enabled) {
@@ -51,6 +61,26 @@ void Scene::setColliderEnabled(ObjectId id, bool enabled) {
 }
 void Scene::setVisualVisible(ObjectId id, std::size_t visual, bool visible) {
     objects_.at(id).visuals.at(visual).visible = visible;
+}
+void Scene::setInteractionEnabled(ObjectId id, bool enabled) {
+    auto& area = objects_.at(id).interaction;
+    if (!area) throw std::invalid_argument("Object is not interactive");
+    area->enabled = enabled;
+}
+std::vector<InteractionCandidate> Scene::interactions(Vec2 origin, float reach, int plane) const {
+    if (!finite(origin) || !std::isfinite(reach) || reach < 0) throw std::invalid_argument("Invalid interaction query");
+    std::vector<InteractionCandidate> result;
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        const auto& object = objects_[i];
+        if (!object.interaction || !object.interaction->enabled || object.interaction->plane != plane) continue;
+        const auto& area = *object.interaction;
+        const auto box = positioned(area.bounds, object.position);
+        const Vec2 point{std::clamp(origin.x, box.x, box.x + box.width), std::clamp(origin.y, box.y, box.y + box.height)};
+        const float distance = std::hypot(point.x - origin.x, point.y - origin.y);
+        if (distance <= std::min(reach, area.reach)) result.push_back({static_cast<ObjectId>(i), distance, box, point});
+    }
+    std::stable_sort(result.begin(), result.end(), [](const auto& a, const auto& b) { return a.distance < b.distance; });
+    return result;
 }
 std::vector<DrawCommand> Scene::drawList() const {
     std::vector<DrawCommand> result;

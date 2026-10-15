@@ -99,15 +99,21 @@ int main() {
         const auto gameData = snapshot(game);
         check(!game.gateOpen, "new scene starts with closed gate");
         game.setGateOpen(true);
+        game.setChestOpen(true);
         std::istringstream openInput(snapshot(game), std::ios::binary);
         auto openGame = storage::read(openInput);
         check(openGame.gateOpen && !openGame.scene.object(openGame.gate).collider->enabled,
               "gate state and physics restored");
+        check(openGame.chestOpen && openGame.scene.object(openGame.chest).visuals[2].visible, "chest state and art restored");
         Sandbox oldScene;
         std::istringstream oldGameInput("PXSANDBOX 1 18 52 0 0 1 15483850418005241176\n" + snapshot(oldScene.world), std::ios::binary);
         auto oldGame = storage::read(oldGameInput);
         check(oldGame.gateOpen && oldGame.x == 18, "legacy game header loads with a clear gate");
+        std::istringstream v2Input("PXSANDBOX 2 18 52 0 0 1 0 5242225865643081145\n" + snapshot(oldScene.world), std::ios::binary);
+        auto v2Game = storage::read(v2Input);
+        check(!v2Game.gateOpen && !v2Game.chestOpen, "version 2 preserves gate and defaults chest closed");
         game.setGateOpen(false);
+        game.setChestOpen(false);
         std::istringstream gameInput(gameData, std::ios::binary);
         auto restored = storage::read(gameInput);
         check(snapshot(restored) == gameData, "character and world round trip");

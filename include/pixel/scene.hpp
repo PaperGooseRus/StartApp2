@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace pixel {
@@ -12,6 +13,10 @@ enum class RenderLayer : std::uint8_t { Background, Interactables, Characters, F
 enum class CollisionGroup : std::uint32_t { Solid = 1, Trigger = 2, Actor = 4 };
 constexpr std::uint32_t mask(CollisionGroup group) { return static_cast<std::uint32_t>(group); }
 bool overlaps(Rect a, Rect b) noexcept;
+struct Sprite {
+    std::string asset;
+    Rect source{0, 0, 1, 1}; // Normalized texture coordinates.
+};
 struct Visual {
     RenderLayer layer = RenderLayer::Interactables;
     int order = 0;
@@ -19,6 +24,7 @@ struct Visual {
     Color color{};
     float parallax = 1;
     bool visible = true;
+    std::optional<Sprite> sprite = std::nullopt;
 };
 struct Collider {
     Rect bounds;
@@ -26,12 +32,25 @@ struct Collider {
     int plane = 0;
     bool enabled = true;
 };
+struct InteractionArea {
+    Rect bounds;
+    float reach = 4.5f;
+    int plane = 0;
+    bool enabled = true;
+};
 struct SceneObject {
     Vec2 position;
     std::vector<Visual> visuals;
     std::optional<Collider> collider;
+    std::optional<InteractionArea> interaction = std::nullopt;
 };
 using ObjectId = std::uint32_t;
+struct InteractionCandidate {
+    ObjectId object;
+    float distance;
+    Rect bounds;
+    Vec2 point;
+};
 struct DrawCommand {
     ObjectId object;
     Visual visual; // bounds are now in world coordinates.
@@ -43,6 +62,8 @@ public:
     void setPosition(ObjectId id, Vec2 position);
     void setColliderEnabled(ObjectId id, bool enabled);
     void setVisualVisible(ObjectId id, std::size_t visual, bool visible);
+    void setInteractionEnabled(ObjectId id, bool enabled);
+    std::vector<InteractionCandidate> interactions(Vec2 origin, float reach = 4.5f, int plane = 0) const;
     std::vector<DrawCommand> drawList() const;
     bool overlaps(Rect box, std::uint32_t groups = mask(CollisionGroup::Solid), int plane = 0) const;
 private:

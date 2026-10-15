@@ -8,9 +8,9 @@ struct Sandbox {
     static constexpr int width = 128, height = 72, surface = 55;
     pixel::World world{width, height};
     pixel::Scene scene;
-    pixel::ObjectId gate = 0;
-    bool gateOpen = false;
-    enum class Interaction { TooFar, Opened, Closed, Occupied };
+    pixel::ObjectId gate = 0, chest = 0;
+    bool gateOpen = false, chestOpen = false;
+    enum class Interaction { TooFar, Opened, Closed, Occupied, ChestOpened, ChestClosed };
     float x = 18, y = surface - 3, velocityY = 0, walked = 0;
     bool grounded = true;
     Sandbox() {
@@ -44,14 +44,21 @@ struct Sandbox {
             }
             scene.add(std::move(mountain));
         }
-        pixel::SceneObject tree;
-        tree.position = {62, 0};
-        tree.visuals = {
-            {RenderLayer::Background, 10, {-6, 43, 13, 8}, {31, 69, 48, 255}, 1},
-            {RenderLayer::Interactables, 10, {0, 48, 1, 7}, {107, 75, 47, 255}, 1},
-            {RenderLayer::Foreground, 0, {-5, 51, 11, 2}, {50, 109, 62, 230}, 1}
-        };
-        scene.add(std::move(tree));
+        for (int cx : {10, 62, 120}) {
+            pixel::SceneObject tree;
+            tree.position = {static_cast<float>(cx), static_cast<float>(surface)};
+            pixel::Visual back{RenderLayer::Background, 10, {-8, -17, 16, 17}, {255, 255, 255, 255}, 1};
+            back.sprite = pixel::Sprite{"oak.png", {0, 0, 1, 1}};
+            tree.visuals.push_back(back);
+            // Re-draw only the lower hanging foliage in front of the actor.
+            pixel::Visual front{RenderLayer::Foreground, 0, {-8, -5.1f, 5.76f, 2.55f}, {255, 255, 255, 210}, 1};
+            front.sprite = pixel::Sprite{"oak.png", {0, 0.7f, 0.36f, 0.15f}};
+            tree.visuals.push_back(front);
+            front.bounds = {3.04f, -5.1f, 4.96f, 2.55f};
+            front.sprite->source = {0.69f, 0.7f, 0.31f, 0.15f};
+            tree.visuals.push_back(front);
+            scene.add(std::move(tree));
+        }
         for (int cx : {22, 92, 116}) {
             pixel::SceneObject bush;
             bush.position = {static_cast<float>(cx), static_cast<float>(surface)};
@@ -61,11 +68,25 @@ struct Sandbox {
         pixel::SceneObject door;
         door.position = {36, static_cast<float>(surface - 5)};
         door.collider = pixel::Collider{{0, 0, 1, 5}};
+        door.interaction = pixel::InteractionArea{{0, 0, 1, 5}};
         door.visuals = {
             {RenderLayer::Interactables, 20, {0, 0, 1, 5}, {207, 139, 64, 255}, 1, true},
             {RenderLayer::Interactables, 20, {0, 0, 3, 0.4f}, {94, 172, 140, 255}, 1, false}
         };
         gate = scene.add(std::move(door));
+        pixel::SceneObject box;
+        box.position = {69, surface - 1.5f};
+        box.collider = pixel::Collider{{0, 0, 2.5f, 1.5f}};
+        box.interaction = pixel::InteractionArea{{0, 0, 2.5f, 1.5f}, 3.5f};
+        box.visuals = {
+            {RenderLayer::Interactables, 20, {0, 0.5f, 2.5f, 1}, {103, 57, 32, 255}},
+            {RenderLayer::Interactables, 21, {0, 0, 2.5f, 0.6f}, {168, 103, 49, 255}},
+            {RenderLayer::Interactables, 22, {0, -0.6f, 2.5f, 0.5f}, {168, 103, 49, 255}, 1, false},
+            {RenderLayer::Interactables, 23, {0.2f, 0, 0.2f, 1.5f}, {209, 168, 83, 255}},
+            {RenderLayer::Interactables, 23, {2.1f, 0, 0.2f, 1.5f}, {209, 168, 83, 255}},
+            {RenderLayer::Interactables, 24, {1, 0.45f, 0.5f, 0.45f}, {240, 202, 108, 255}}
+        };
+        chest = scene.add(std::move(box));
     }
     void setGateOpen(bool open) {
         gateOpen = open;
@@ -73,12 +94,44 @@ struct Sandbox {
         scene.setVisualVisible(gate, 0, !open);
         scene.setVisualVisible(gate, 1, open);
     }
+    void setChestOpen(bool open) {
+        chestOpen = open;
+        scene.setVisualVisible(chest, 1, !open);
+        scene.setVisualVisible(chest, 2, open);
+        scene.setVisualVisible(chest, 5, !open);
+    }
+    std::optional<pixel::InteractionCandidate> interactionTarget() const {
+        const pixel::Vec2 origin{x + 1, y + 1.5f};
+        for (const auto& candidate : scene.interactions(origin)) {
+            const int steps = std::max(1, static_cast<int>(std::ceil(candidate.distance * 8)));
+            bool visible = true;
+            for (int i = 1; i <= steps; ++i) {
+                const float t = static_cast<float>(i) / steps;
+                const int cx = static_cast<int>(std::floor(origin.x + (candidate.point.x - origin.x) * t));
+                const int cy = static_cast<int>(std::floor(origin.y + (candidate.point.y - origin.y) * t));
+                if (solid(cx, cy)) { visible = false; break; }
+            }
+            if (visible) return candidate;
+        }
+        return std::nullopt;
+    }
+    std::string interactionPrompt() const {
+        const auto target = interactionTarget();
+        if (!target) return "";
+        if (target->object == gate) return gateOpen ? "E: CLOSE DOOR" : "E: OPEN DOOR";
+        if (target->object == chest) return chestOpen ? "E: CLOSE CHEST" : "E: OPEN CHEST";
+        return "";
+    }
     Interaction interact() {
+        const auto target = interactionTarget();
+        if (!target) return Interaction::TooFar;
+        if (target->object == chest) {
+            setChestOpen(!chestOpen);
+            return chestOpen ? Interaction::ChestOpened : Interaction::ChestClosed;
+        }
+        if (target->object != gate) return Interaction::TooFar;
         const auto position = scene.object(gate).position;
-        if (std::abs(x + 1 - (position.x + 0.5f)) > 4.5f ||
-            std::abs(y + 1.5f - (position.y + 2.5f)) > 4) return Interaction::TooFar;
-        if (gateOpen && pixel::overlaps({x, y, 2, 3}, {position.x, position.y, 1, 5}))
-            return Interaction::Occupied;
+        if (gateOpen && pixel::overlaps({x, y, 2, 3}, {position.x, position.y, 1, 5})) return Interaction::Occupied;
         setGateOpen(!gateOpen);
         return gateOpen ? Interaction::Opened : Interaction::Closed;
     }

@@ -34,8 +34,8 @@ void write(const Sandbox& game, std::ostream& output) {
     std::ostringstream header;
     header.imbue(std::locale::classic());
     header << std::setprecision(std::numeric_limits<float>::max_digits10)
-           << "PXSANDBOX 2 " << game.x << ' ' << game.y << ' ' << game.velocityY << ' '
-           << game.walked << ' ' << static_cast<int>(game.grounded) << ' ' << static_cast<int>(game.gateOpen);
+           << "PXSANDBOX 3 " << game.x << ' ' << game.y << ' ' << game.velocityY << ' '
+           << game.walked << ' ' << static_cast<int>(game.grounded) << ' ' << static_cast<int>(game.gateOpen) << ' ' << static_cast<int>(game.chestOpen);
     const auto text = header.str();
     header << ' ' << checksum(text) << '\n';
     output << header.str();
@@ -53,15 +53,17 @@ Sandbox read(std::istream& input) {
     std::istringstream header(line);
     header.imbue(std::locale::classic());
     std::string magic;
-    int version, grounded, gateOpen = 1; // Old saves predate the gate; keep their path open.
+    int version, grounded, gateOpen = 1, chestOpen = 0; // Old saves predate the gate; keep their path open.
     std::uint64_t storedChecksum;
     float x, y, velocity, walked;
     if (!(header >> magic >> version >> x >> y >> velocity >> walked >> grounded) ||
-        magic != "PXSANDBOX" || (version != 1 && version != 2) ||
+        magic != "PXSANDBOX" || (version < 1 || version > 3) ||
         !validCharacter(x, y, velocity, walked) || (grounded != 0 && grounded != 1))
         throw std::runtime_error("Invalid character state or game save version");
-    if (version == 2 && (!(header >> gateOpen) || (gateOpen != 0 && gateOpen != 1)))
+    if (version >= 2 && (!(header >> gateOpen) || (gateOpen != 0 && gateOpen != 1)))
         throw std::runtime_error("Invalid gate state");
+    if (version >= 3 && (!(header >> chestOpen) || (chestOpen != 0 && chestOpen != 1)))
+        throw std::runtime_error("Invalid chest state");
     if (!(header >> storedChecksum)) throw std::runtime_error("Missing character checksum");
     const auto checksumStart = line.find_last_of(' ');
     if (checksumStart == std::string::npos || storedChecksum != checksum(line.substr(0, checksumStart)))
@@ -79,6 +81,7 @@ Sandbox read(std::istream& input) {
     game.walked = walked;
     game.grounded = grounded != 0;
     game.setGateOpen(gateOpen != 0);
+    game.setChestOpen(chestOpen != 0);
     return game;
 }
 void save(const Sandbox& game, const std::filesystem::path& file) {

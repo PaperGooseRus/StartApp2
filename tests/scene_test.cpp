@@ -63,6 +63,41 @@ int main() {
         catch (const std::invalid_argument&) { rejected = true; }
         check(rejected && stable.drawList().size() == 2, "invalid visual rejected without insertion");
 
+        Scene interactions;
+        SceneObject item;
+        item.position = {4, 0};
+        item.interaction = InteractionArea{{0, 0, 1, 1}, 5};
+        const auto far = interactions.add(item);
+        item.position = {2, 0};
+        const auto near = interactions.add(item), tie = interactions.add(item);
+        auto candidates = interactions.interactions({0, 0});
+        check(candidates.size() == 3 && candidates[0].object == near && candidates[1].object == tie &&
+              candidates[2].object == far, "nearest target selected, ties stable");
+        check(candidates[0].point.x == 2 && candidates[0].distance == 2, "reach measured from closest boundary");
+        check(interactions.interactions({0, 0}, 1).empty(), "query reach enforced");
+        check(interactions.interactions({0, 0}, 5, 1).empty(), "interaction plane enforced");
+        interactions.setInteractionEnabled(near, false);
+        check(interactions.interactions({0, 0})[0].object == tie, "interaction can be disabled independently");
+        item.position = {3, 0}; item.interaction->reach = 2;
+        interactions.add(item);
+        check(interactions.interactions({0, 0}).size() == 2, "per-object reach enforced");
+        rejected = false;
+        try { interactions.interactions({0, 0}, -1); } catch (const std::invalid_argument&) { rejected = true; }
+        check(rejected, "negative query reach rejected");
+        item.interaction->reach = std::numeric_limits<float>::infinity();
+        rejected = false;
+        try { interactions.add(item); } catch (const std::invalid_argument&) { rejected = true; }
+        check(rejected, "invalid interaction reach rejected");
+        SceneObject art;
+        art.visuals = {{RenderLayer::Background, 0, {0, 0, 3, 3}}};
+        art.visuals[0].sprite = Sprite{"oak.png", {0, 0, 1, 1}};
+        const auto artId = interactions.add(art);
+        check(interactions.object(artId).visuals[0].sprite->asset == "oak.png", "sprite metadata retained without SDL dependency");
+        art.visuals[0].sprite->source.width = 2;
+        rejected = false;
+        try { interactions.add(art); } catch (const std::invalid_argument&) { rejected = true; }
+        check(rejected, "out-of-texture source rejected");
+
         Sandbox game;
         check(game.interact() == Sandbox::Interaction::TooFar, "gate requires proximity");
         for (int i = 0; i < 180; ++i) game.tick(1, false);
@@ -74,6 +109,15 @@ int main() {
         check(game.interact() == Sandbox::Interaction::Occupied && game.gateOpen, "gate cannot close onto player");
         game.x = 39;
         check(game.interact() == Sandbox::Interaction::Closed && !game.gateOpen, "gate can close after passage");
+        game.x = 65; game.y = Sandbox::surface - 3;
+        check(game.interactionTarget()->object == game.chest && game.interactionPrompt() == "E: OPEN CHEST", "chest selected with action hint");
+        check(game.interact() == Sandbox::Interaction::ChestOpened && game.chestOpen, "chest opens");
+        check(game.interact() == Sandbox::Interaction::ChestClosed && !game.chestOpen, "chest closes");
+        game.world.set(68, 53, Material::Stone);
+        check(game.interact() == Sandbox::Interaction::TooFar, "terrain wall blocks interaction");
+        game.world.set(68, 53, Material::Air);
+        game.scene.setInteractionEnabled(game.chest, false);
+        check(game.interact() == Sandbox::Interaction::TooFar, "disabled object cannot be used");
         std::cout << "Scene checks passed: layer sorting, shared objects, collision masks, camera, parallax, gate interactions\n";
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }

@@ -28,3 +28,8 @@ F speeds up growth and absorption. Player limbs are visual only for now.
 Version 0.5: E opens/closes the nearby gate; C toggles camera follow.
 J/L pan when follow is off. Tab toggles foreground decoration.
 Saves include the gate. Old saves remain readable with the gate open.
+
+Version 0.6: E interacts with the nearest accessible door or chest.
+The target has a gold outline and E badge; its action appears in the title.
+PNG oak trees use layered transparent sprites. Keep the assets folder
+beside the executable. Saves include both door and chest states.
