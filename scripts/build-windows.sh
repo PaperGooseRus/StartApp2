@@ -9,4 +9,4 @@ cmake -S "$project_dir" -B "$project_dir/build/windows" -G Ninja -DCMAKE_BUILD_T
 cmake --build "$project_dir/build/windows" --parallel 2
 ctest --test-dir "$project_dir/build/windows" --output-on-failure
 cmake --install "$project_dir/build/windows" --prefix "$project_dir/build/package-windows"
-echo "Ready: $project_dir/build/package-windows/StartGame.bat"
+echo "Ready: $project_dir/build/package-windows/StartEditor.bat (IDE), StartGame.bat (game)"

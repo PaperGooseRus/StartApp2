@@ -9,11 +9,19 @@ scene_tests.exe
 if errorlevel 1 goto failed
 snapshot_tests.exe
 if errorlevel 1 goto failed
-set "SDL_VIDEODRIVER=dummy"
-PixelSandbox.exe --smoke-test
+studio_tests.exe
 if errorlevel 1 goto failed
+set "SDL_VIDEODRIVER=dummy"
+if exist PixelSandbox.exe (
+    PixelSandbox.exe --smoke-test
+    if errorlevel 1 goto failed
+)
+if exist PixelEditor.exe (
+    PixelEditor.exe --smoke-test
+    if errorlevel 1 goto failed
+)
 echo.
-echo All checks passed. You can start the game with StartGame.bat.
+echo All checks passed. StartEditor.bat opens the IDE; StartGame.bat opens the game.
 pause
 exit /b 0
 :failed

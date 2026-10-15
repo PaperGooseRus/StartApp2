@@ -36,7 +36,7 @@ struct Sandbox {
     void createScene() {
         using pixel::RenderLayer;
         for (int peak : {12, 48, 86, 122}) {
-            pixel::SceneObject mountain;
+            pixel::SceneObject mountain; mountain.name = "Горы";
             for (int step = -12; step <= 12; step += 2) {
                 const float h = 4 + (12 - std::abs(step)) * 1.2f;
                 mountain.visuals.push_back({RenderLayer::Background, -10,
@@ -45,7 +45,7 @@ struct Sandbox {
             scene.add(std::move(mountain));
         }
         for (int cx : {10, 62, 120}) {
-            pixel::SceneObject tree;
+            pixel::SceneObject tree; tree.name = "Дуб";
             tree.position = {static_cast<float>(cx), static_cast<float>(surface)};
             pixel::Visual back{RenderLayer::Background, 10, {-8, -17, 16, 17}, {255, 255, 255, 255}, 1};
             back.sprite = pixel::Sprite{"oak.png", {0, 0, 1, 1}};
@@ -60,12 +60,12 @@ struct Sandbox {
             scene.add(std::move(tree));
         }
         for (int cx : {22, 92, 116}) {
-            pixel::SceneObject bush;
+            pixel::SceneObject bush; bush.name = "Куст";
             bush.position = {static_cast<float>(cx), static_cast<float>(surface)};
             bush.visuals.push_back({RenderLayer::Foreground, 5, {-2, -1.5f, 4, 1.5f}, {47, 119, 64, 200}, 1.15f});
             scene.add(std::move(bush));
         }
-        pixel::SceneObject door;
+        pixel::SceneObject door; door.name = "Дверь"; door.action = "door";
         door.position = {36, static_cast<float>(surface - 5)};
         door.collider = pixel::Collider{{0, 0, 1, 5}};
         door.interaction = pixel::InteractionArea{{0, 0, 1, 5}};
@@ -74,7 +74,7 @@ struct Sandbox {
             {RenderLayer::Interactables, 20, {0, 0, 3, 0.4f}, {94, 172, 140, 255}, 1, false}
         };
         gate = scene.add(std::move(door));
-        pixel::SceneObject box;
+        pixel::SceneObject box; box.name = "Сундук"; box.action = "chest";
         box.position = {69, surface - 1.5f};
         box.collider = pixel::Collider{{0, 0, 2.5f, 1.5f}};
         box.interaction = pixel::InteractionArea{{0, 0, 2.5f, 1.5f}, 3.5f};
@@ -88,21 +88,25 @@ struct Sandbox {
         };
         chest = scene.add(std::move(box));
     }
-    void setGateOpen(bool open) {
-        gateOpen = open;
-        scene.setColliderEnabled(gate, !open);
-        scene.setVisualVisible(gate, 0, !open);
-        scene.setVisualVisible(gate, 1, open);
+    void setObjectOpen(pixel::ObjectId id, bool open) {
+        auto object = scene.object(id);
+        if (object.action == "door") {
+            if (object.collider) object.collider->enabled = !open;
+            if (object.visuals.size() >= 2) { object.visuals[0].visible = !open; object.visuals[1].visible = open; }
+        } else if (object.action == "chest" && object.visuals.size() >= 6) {
+            object.visuals[1].visible = !open; object.visuals[2].visible = open; object.visuals[5].visible = !open;
+        }
+        object.state = open; scene.replace(id, std::move(object));
+        if (id == gate) gateOpen = open;
+        if (id == chest) chestOpen = open;
     }
-    void setChestOpen(bool open) {
-        chestOpen = open;
-        scene.setVisualVisible(chest, 1, !open);
-        scene.setVisualVisible(chest, 2, open);
-        scene.setVisualVisible(chest, 5, !open);
-    }
+    void setGateOpen(bool open) { setObjectOpen(gate, open); }
+    void setChestOpen(bool open) { setObjectOpen(chest, open); }
     std::optional<pixel::InteractionCandidate> interactionTarget() const {
         const pixel::Vec2 origin{x + 1, y + 1.5f};
         for (const auto& candidate : scene.interactions(origin)) {
+            const auto& action = scene.object(candidate.object).action;
+            if (action != "door" && action != "chest") continue;
             const int steps = std::max(1, static_cast<int>(std::ceil(candidate.distance * 8)));
             bool visible = true;
             for (int i = 1; i <= steps; ++i) {
@@ -118,22 +122,25 @@ struct Sandbox {
     std::string interactionPrompt() const {
         const auto target = interactionTarget();
         if (!target) return "";
-        if (target->object == gate) return gateOpen ? "E: CLOSE DOOR" : "E: OPEN DOOR";
-        if (target->object == chest) return chestOpen ? "E: CLOSE CHEST" : "E: OPEN CHEST";
+        const auto& object = scene.object(target->object);
+        if (object.action == "door") return object.state ? "E: CLOSE DOOR" : "E: OPEN DOOR";
+        if (object.action == "chest") return object.state ? "E: CLOSE CHEST" : "E: OPEN CHEST";
         return "";
     }
     Interaction interact() {
         const auto target = interactionTarget();
         if (!target) return Interaction::TooFar;
-        if (target->object == chest) {
-            setChestOpen(!chestOpen);
-            return chestOpen ? Interaction::ChestOpened : Interaction::ChestClosed;
+        const auto& object = scene.object(target->object);
+        const bool open = !object.state;
+        if (object.action == "door" && !open && object.collider) {
+            auto bounds = object.collider->bounds;
+            bounds.x += object.position.x; bounds.y += object.position.y;
+            if (pixel::overlaps({x, y, 2, 3}, bounds)) return Interaction::Occupied;
         }
-        if (target->object != gate) return Interaction::TooFar;
-        const auto position = scene.object(gate).position;
-        if (gateOpen && pixel::overlaps({x, y, 2, 3}, {position.x, position.y, 1, 5})) return Interaction::Occupied;
-        setGateOpen(!gateOpen);
-        return gateOpen ? Interaction::Opened : Interaction::Closed;
+        const bool isChest = object.action == "chest";
+        setObjectOpen(target->object, open);
+        return isChest ? (open ? Interaction::ChestOpened : Interaction::ChestClosed) :
+                         (open ? Interaction::Opened : Interaction::Closed);
     }
     bool solid(int cx, int cy) const {
         if (cx < 0 || cx >= width || cy < 0 || cy >= height) return true;

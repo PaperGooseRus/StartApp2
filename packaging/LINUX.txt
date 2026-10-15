@@ -33,3 +33,11 @@ Version 0.6: E interacts with the nearest accessible door or chest.
 The target has a gold outline and E badge; its action appears in the title.
 PNG oak trees use layered transparent sprites. Keep the assets folder
 beside the executable. Saves include both door and chest states.
+
+Version 0.7 includes PixelStudio IDE: start with StartEditor.bat (Windows)
+or ./StartEditor.sh (Linux). The editor UI is in Russian.
+Canvas: pencil, eraser, fill, picker, palette, undo/redo and PNG import/export.
+Timeline: frame selection, duplicate, delete, reorder, durations and playback.
+Save projects as .pxproj; Play runs an isolated copy of the level.
+See docs/editor.md for controls, file locations and limits.
+Linux IDE requires SDL2 2.0.18+ (e.g. Ubuntu 22.04+).

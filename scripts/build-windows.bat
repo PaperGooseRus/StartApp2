@@ -15,4 +15,4 @@ ctest --test-dir build\windows -C Release --output-on-failure
 if errorlevel 1 exit /b 1
 cmake --install build\windows --config Release --prefix build\package-windows
 if errorlevel 1 exit /b 1
-echo Ready: build\package-windows\StartGame.bat
+echo Ready: build\package-windows\StartEditor.bat and StartGame.bat

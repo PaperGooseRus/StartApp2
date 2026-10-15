@@ -2,6 +2,7 @@
 #include "sandbox.hpp"
 #include "sprites.hpp"
 #include <SDL.h>
+#include <array>
 
 class GameRenderer {
 public:
@@ -10,9 +11,13 @@ public:
     pixel::Camera& camera() noexcept { return camera_; }
     void followPlayer(const Sandbox& game);
     pixel::Vec2 mouseToWorld(int pixelX, int pixelY) const;
-    void draw(const Sandbox& game, bool present = true, int movement = 0);
+    void draw(const Sandbox& game, bool present = true, int movement = 0, double animationSeconds = 0);
+    SpriteCache& sprites() noexcept { return sprites_; }
+    bool showHints = true;
     bool showForeground = true;
+    std::array<bool, 4> layerVisible{true, true, true, true};
 private:
+    double animationSeconds_ = 0;
     pixel::Camera frameCamera() const;
     void quad(pixel::Rect rect, pixel::Color color, float parallax = 1);
     void sprite(const pixel::Visual& visual);

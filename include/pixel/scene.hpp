@@ -1,4 +1,7 @@
 #pragma once
+#include "geometry.hpp"
+#include "animation.hpp"
+#include <iosfwd>
 #include <cstdint>
 #include <cstddef>
 #include <optional>
@@ -6,9 +9,6 @@
 #include <vector>
 
 namespace pixel {
-struct Vec2 { float x = 0, y = 0; };
-struct Rect { float x = 0, y = 0, width = 1, height = 1; };
-struct Color { std::uint8_t r = 255, g = 255, b = 255, a = 255; };
 enum class RenderLayer : std::uint8_t { Background, Interactables, Characters, Foreground };
 enum class CollisionGroup : std::uint32_t { Solid = 1, Trigger = 2, Actor = 4 };
 constexpr std::uint32_t mask(CollisionGroup group) { return static_cast<std::uint32_t>(group); }
@@ -16,6 +16,7 @@ bool overlaps(Rect a, Rect b) noexcept;
 struct Sprite {
     std::string asset;
     Rect source{0, 0, 1, 1}; // Normalized texture coordinates.
+    std::optional<AnimationClip> animation = std::nullopt;
 };
 struct Visual {
     RenderLayer layer = RenderLayer::Interactables;
@@ -43,6 +44,10 @@ struct SceneObject {
     std::vector<Visual> visuals;
     std::optional<Collider> collider;
     std::optional<InteractionArea> interaction = std::nullopt;
+    std::string name;
+    std::string action; // Game-defined: e.g. door or chest.
+    bool state = false;
+    bool active = true;
 };
 using ObjectId = std::uint32_t;
 struct InteractionCandidate {
@@ -59,6 +64,11 @@ class Scene {
 public:
     ObjectId add(SceneObject object);
     const SceneObject& object(ObjectId id) const;
+    std::size_t size() const noexcept { return objects_.size(); }
+    void replace(ObjectId id, SceneObject object);
+    void erase(ObjectId id); // Keeps IDs stable, including across save/load.
+    void save(std::ostream& output) const;
+    static Scene load(std::istream& input);
     void setPosition(ObjectId id, Vec2 position);
     void setColliderEnabled(ObjectId id, bool enabled);
     void setVisualVisible(ObjectId id, std::size_t visual, bool visible);

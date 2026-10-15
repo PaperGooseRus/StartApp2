@@ -40,7 +40,7 @@ void GameRenderer::sprite(const pixel::Visual& visual) {
     const auto view = camera_.viewport();
     if (screen.x >= view.x || screen.y >= view.y || screen.x + visual.bounds.width <= 0 || screen.y + visual.bounds.height <= 0) return;
     const auto& texture = sprites_.get(visual.sprite->asset);
-    const auto region = visual.sprite->source;
+    const auto region = visual.sprite->animation ? visual.sprite->animation->frames()[visual.sprite->animation->frameAt(animationSeconds_)].source : visual.sprite->source;
     const float left = std::max(0.0f, screen.x), top = std::max(0.0f, screen.y);
     const float right = std::min(view.x, screen.x + visual.bounds.width), bottom = std::min(view.y, screen.y + visual.bounds.height);
     const int sx = std::clamp(static_cast<int>((region.x + (static_cast<double>(left) - screen.x) / visual.bounds.width * region.width) * texture.width), 0, texture.width - 1);
@@ -118,12 +118,14 @@ void GameRenderer::terrain(const pixel::World& world) {
         }
     }
 }
-void GameRenderer::draw(const Sandbox& game, bool present, int movement) {
+void GameRenderer::draw(const Sandbox& game, bool present, int movement, double animationSeconds) {
+    animationSeconds_ = animationSeconds;
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(renderer_, 19, 27, 43, 255);
     SDL_RenderClear(renderer_);
     const auto commands = game.scene.drawList();
     auto layer = [&](pixel::RenderLayer target, bool beforeAnchor = false) {
+        if (!layerVisible[static_cast<std::size_t>(target)]) return;
         for (const auto& command : commands) {
             const auto& visual = command.visual;
             if (visual.layer != target) continue;
@@ -134,13 +136,13 @@ void GameRenderer::draw(const Sandbox& game, bool present, int movement) {
     };
     layer(pixel::RenderLayer::Background);
     layer(pixel::RenderLayer::Interactables, true);
-    terrain(game.world); // Terrain occupies order=0 in the interaction layer.
+    if (layerVisible[1]) terrain(game.world); // Terrain occupies order=0 in the interaction layer.
     layer(pixel::RenderLayer::Interactables);
     layer(pixel::RenderLayer::Characters, true);
     const auto player = frameCamera().worldToScreen({game.x, game.y});
-    drawPlayer(renderer_, player.x, player.y, game.grounded, game.walked, movement, scale);
+    if (layerVisible[2]) drawPlayer(renderer_, player.x, player.y, game.grounded, game.walked, movement, scale);
     layer(pixel::RenderLayer::Characters);
     if (showForeground) layer(pixel::RenderLayer::Foreground);
-    interactionHint(game);
+    if (showHints) interactionHint(game);
     if (present) SDL_RenderPresent(renderer_);
 }
