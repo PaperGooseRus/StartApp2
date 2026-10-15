@@ -97,6 +97,17 @@ int main() {
         for (int i = 0; i < 39; ++i) game.tick(1, false);
         game.tick(0, true); // Save while in flight, including velocity and step distance.
         const auto gameData = snapshot(game);
+        check(!game.gateOpen, "new scene starts with closed gate");
+        game.setGateOpen(true);
+        std::istringstream openInput(snapshot(game), std::ios::binary);
+        auto openGame = storage::read(openInput);
+        check(openGame.gateOpen && !openGame.scene.object(openGame.gate).collider->enabled,
+              "gate state and physics restored");
+        Sandbox oldScene;
+        std::istringstream oldGameInput("PXSANDBOX 1 18 52 0 0 1 15483850418005241176\n" + snapshot(oldScene.world), std::ios::binary);
+        auto oldGame = storage::read(oldGameInput);
+        check(oldGame.gateOpen && oldGame.x == 18, "legacy game header loads with a clear gate");
+        game.setGateOpen(false);
         std::istringstream gameInput(gameData, std::ios::binary);
         auto restored = storage::read(gameInput);
         check(snapshot(restored) == gameData, "character and world round trip");
